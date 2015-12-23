@@ -1,0 +1,126 @@
+---
+title: "Human Activity Recognition Using Accelerometer Data"
+author: "Valerii Podymov"
+date: "December 22, 2015"
+output: html_document
+---
+
+```{r global_options, include=FALSE}
+library(knitr)
+opts_chunk$set(warning=FALSE, message=FALSE)
+library(caret)
+library(ipred)
+library(randomForest)
+```
+
+## Overview
+
+Human activity recognition is an important and challenging research area with many applications in healthcare, fitness and smart environments. One of the most efficient approaches to this problem is to process data from inertial measurement units embedded to wearable devices.
+
+The data for this project come from [HAR Project website](http://groupware.les.inf.puc-rio.br/har). The data were collected from accelerometers located on the belt, forearm, arm, and dumbbell of six participants. The aim of this project is to predict manner in which they did the exercise.
+
+## Data Cleaning
+
+```{r, cache=TRUE}
+#### Load data 
+pml_training <- read.csv("pml-training.csv", 
+                    na.strings = "NA",
+                    stringsAsFactors = FALSE)
+
+pml_testing = read.csv("pml-testing.csv")
+```
+
+In order to make data clean we remove missing values, near-zero variance variables and unrelated variables. 
+
+```{r}
+#### Remove mising values
+pml_training <- pml_training[, 
+    which(as.numeric(colSums(is.na(pml_training))) == 0)]
+
+pml_testing <- pml_testing[, 
+    which(as.numeric(colSums(is.na(pml_testing))) == 0)]
+
+#### Remove near-zero variance values
+pml_training <- pml_training[, 
+    nearZeroVar(pml_training, saveMetrics = TRUE)$nzv==FALSE]
+
+pml_testing <- pml_testing[, 
+    nearZeroVar(pml_testing, saveMetrics = TRUE)$nzv==FALSE]
+
+#### Transform output variable to factor
+pml_training$classe <- factor(pml_training$classe)
+
+#### Remove unrelated variables (first seven columns)
+train_clean <- pml_training[, -(1:7)]
+test_clean <- pml_testing[, -(1:7)]
+```
+
+Then we split the `train_clean` data set to two subsets which contain 60% of samples for training a model and 40% of samples for cross-validation. 
+
+```{r}
+set.seed(1234)
+inTrain = createDataPartition(y = train_clean$classe, p=0.6, list = FALSE)
+training = train_clean[inTrain, ]
+testing = train_clean[-inTrain, ]
+dim(training); dim(testing)
+```
+
+## Building a Predictive Model
+
+We use the Random Forest algorithm, since it is supposed to provide a high accuracy and does not require data pre-processing. 
+
+```{r}
+set.seed(1234)
+
+#### Using 3-fold cross-validation to tune the model parameters
+newTC <- trainControl(method = "cv", number = 3, verboseIter = TRUE)
+
+#### Building a model
+modFit <- train(classe ~ ., data = training, method = "rf", trControl = newTC)
+```
+
+The final model is:
+
+```{r}
+modFit$finalModel
+```
+
+And it contains 500 trees and 26 variables at each split.
+
+## Cross-Validation
+
+Now we are ready to use the trained model to predict `classe` variable within the `testing` data set.
+
+```{r}
+#### Predict `classe` variable
+cv_test <- predict(modFit, newdata = testing)
+
+#### Calculate confusion matrix
+cfmx <- confusionMatrix(testing$classe, cv_test)
+cfmx
+```
+
+The accuracy and the Cohen???s kappa indicator of concordance indicate that the model is expected to have a low out-of-sample error rate.
+
+## Testing on Out-Of-Sample Data
+
+We use the `test_clean` data set for the final out-of-sample test. The expected out-of-sample error is `100 - 99.08 = 0.92%`.
+
+```{r}
+oos_test = predict(modFit, test_clean)
+oos_test
+```
+
+The following function can be used to save results in files
+
+```{r}
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+
+pml_write_files(oos_test)
+```
