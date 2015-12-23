@@ -100,7 +100,7 @@ cfmx <- confusionMatrix(testing$classe, cv_test)
 cfmx
 ```
 
-The accuracy and the Cohen???s kappa indicator of concordance indicate that the model is expected to have a low out-of-sample error rate.
+The accuracy and the Cohen's kappa indicator of concordance show that the model is expected to have a low out-of-sample error rate.
 
 ## Testing on Out-Of-Sample Data
 
